@@ -1,0 +1,155 @@
+---
+title: "Representative of a taxon"
+author: "Linh Dang"
+format: html
+editor: visual
+---
+
+## 
+
+# Summary
+
+From fasta sequences to a representative sequence of each taxa, then create phylo tree.
+
+# Step 1
+
+Sampling \~ 1000 sequence from fasta file (length range 1200-1800)
+
+`./SamplingSeq.sh DirIn DirOut`
+
+Make MSA with Clustal Omega
+
+`./AlignSeq.sh DirIn DirOut`
+
+## Step 2
+
+For every MSA of each taxon, I calculate its consensus sequence
+
+```{r}
+library(msa)
+library(Biostrings)
+library(dplyr)
+#library(ips)
+
+Dir2Fasta <- "/sybig/home/agneese/linh_cah/run7/align_500"
+Dir2Consensus <- "/sybig/home/agneese/linh_cah/Consensus_seq_run7"
+#Lst_TaxID <- c(562, 1303, 28037, 29466, 46125, 2576376)
+Tib_Taxa <- read.table("/sybig/home/agneese/linh_cah/run4/20_taxa_species_tree.tsv", header=T, sep="\t")
+for(TaxID in Tib_Taxa$OTU){
+  #TaxID <- 1303
+  Tax_msa <- Biostrings::readDNAMultipleAlignment(file.path(Dir2Fasta, paste0(TaxID, ".fa")))
+  #consen_seq <- msaConsensusSequence(Tax_msa)
+  consen_seq <- msaConsensusSequence.MultipleAlignment2(Tax_msa, type="upperlower", thresh=c(40, 25))
+  writeXStringSet(BStringSet(consen_seq), file.path(Dir2Consensus, paste0(TaxID, "_consensus_org.fa")))
+  consen_seq_trim <- gsub('[-?.]', '', consen_seq) %>% toupper()
+  consen_seq_DNAStr <- DNAStringSet(consen_seq_trim)
+  names(consen_seq_DNAStr) <- toString(TaxID)
+  writeXStringSet(consen_seq_DNAStr, file.path(Dir2Consensus, paste0(TaxID, "_consensus.fa")))
+}
+```
+
+# Step 3
+
+Create MSA from those consensus seqs, doing with HPC
+
+Step 4
+
+Make a tree via FastTree and plot
+
+```{r}
+Dir2Consensus <- "/sybig/home/agneese/linh_cah/run6"
+cmd <- paste0("~/Software/FastTree -nt -gtr ", file.path(Dir2Consensus, "All.fa.align"), " > ", file.path(Dir2Consensus, "tree_file_ClustalO"))
+system(cmd)
+
+```
+
+Plot tree
+
+```{r}
+library(ape)
+library(tidytree)
+l2.tree <- read.tree(file.path(Dir2Consensus, "tree_file_ClustalO"))
+
+l2.tree.tibble <- as_tibble(l2.tree)
+
+Tib_Taxa$OTU <- as.character(Tib_Taxa$OTU)
+l2.tree.tibble <- left_join(x=l2.tree.tibble, y=Tib_Taxa, by = c("label"="OTU"))
+l2.tree.tibble$label[1:(min(which(is.na(l2.tree.tibble$species)))-1)] <- l2.tree.tibble$species[1:(min(which(is.na(l2.tree.tibble$species)))-1)]
+l2.tree.tibble <- l2.tree.tibble[,-c(5)]
+
+jpeg(file.path(Dir2Consensus, "tree.png"))
+l2.tree <- as.phylo(l2.tree.tibble)
+plot(l2.tree)
+dev.off()
+```
+
+# Consensus seq vs SilvaDB
+
+```{r}
+Silva_16S_DB <- readDNAStringSet("../../MicrobiomePublicDatasetMining/raw_data/16S_rRNA/Silva/SILVA_138.1_SSURef_NR99_tax_silva_Curated_AddTaxID_WithMetadata.fasta")
+additional_seq <- readDNAStringSet("../../MicrobiomePublicDatasetMining/raw_data/16S_rRNA/BlastInferred/2576376.fasta") 
+Silva_16S_DB <- append(Silva_16S_DB, additional_seq)
+Silva_16S_DB_TaxID <- lapply(names(Silva_16S_DB), function(x){strsplit(x, "\\s+")[[1]][1]}) %>% unlist()
+metadata(Silva_16S_DB)$TaxID <- Silva_16S_DB_TaxID
+##--------
+Silva_16S_20Taxa <- DNAStringSet()
+for(t in Tib_Taxa$OTU){
+  tmp <- Extract_16S(Silva_16S_DB, t)
+  Silva_16S_20Taxa <- append(Silva_16S_20Taxa, tmp)
+}
+Silva_16S_20Taxa_TaxID <- lapply(names(Silva_16S_20Taxa), function(x){strsplit(x, "\\s+")[[1]][1]}) %>% unlist()
+## calculate 20 x 20 matrix
+My_16S <- readDNAStringSet("/sybig/home/agneese/linh_cah/run7/AllTax.consensus")
+## pairwise distance
+```
+
+```{r}
+## Nucleotide global, local, and overlap alignments
+  s1 <- DNAString("ACTTCACCAGCTCCCTGGCGGTAAGTTGATCAAAGGAAACGCAAAGTTTTCAAG")
+  s2 <- DNAString("GTTTCACTACTTCCTTTCGGGTAAGTAAATATATAAATATATAAAAATATAATTTTCATC")
+
+  ss1 <- DNAString("ACTTCACCAGC")
+  ss2 <- DNAString("ACTTCACACCAGC")
+  # First use a fixed substitution matrix
+  mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = -1)
+  globalAlign <-
+    pairwiseAlignment(ss1, ss2, substitutionMatrix = mat,
+                      gapOpening = 0, gapExtension = 0)
+  localAlign <-
+    pairwiseAlignment(s1, s2, type = "local", substitutionMatrix = mat,
+                      gapOpening = 0, gapExtension = 0)
+  overlapAlign <-
+    pairwiseAlignment(s1, s2, type = "overlap", substitutionMatrix = mat,
+                      gapOpening = 5, gapExtension = 2)
+  
+  pat <- DNAString(toString(My_16S[1]))
+  sub <- DNAString(toString(Silva_16S_20Taxa[20]))
+xx <-  pairwiseAlignment(pat, sub, substitutionMatrix = mat, gapOpening = 5, gapExtension = 2)
+```
+
+```{r}
+#mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = -1, baseOnly = TRUE)
+mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = -1)
+
+Silva_16S_20Taxa <- Silva_16S_20Taxa[order(Silva_16S_20Taxa_TaxID)]
+Silva_16S_20Taxa_TaxID <- Silva_16S_20Taxa_TaxID[order(Silva_16S_20Taxa_TaxID)]
+s1 <- Silva_16S_20Taxa[[1]]
+s2 <- Silva_16S_20Taxa[[20]]
+s3 <- My_16S[[1]]
+
+globalAlign <- pairwiseAlignment(s3, s1, substitutionMatrix = mat, gapOpening = 5, gapExtension = 2)
+localAlign <- pairwiseAlignment(s2, s3, type = "local", substitutionMatrix = mat, gapOpening = 5, gapExtension = 2)
+```
+
+```{r}
+tmp_m <- matrix(0, nrow = 20, ncol = 20)
+## row - pattern - My_16S
+## column - subject - Silva_16S
+rownames(tmp_m) <- Silva_16S_20Taxa_TaxID
+colnames(tmp_m) <- Silva_16S_20Taxa_TaxID
+for(i in 1:20){
+  pat <- My_16S[[i]]
+  tmp <- lapply(Silva_16S_20Taxa, pairwiseAlignment, type = "global-local", pattern = pat, substitutionMatrix = mat, gapOpening = 1, gapExtension = 1, scoreOnly = TRUE) %>% unlist()
+  tmp_m[i,] <-  tmp
+}
+```
