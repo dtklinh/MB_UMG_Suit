@@ -99,7 +99,7 @@ for(t in Tib_Taxa$OTU){
 }
 Silva_16S_20Taxa_TaxID <- lapply(names(Silva_16S_20Taxa), function(x){strsplit(x, "\\s+")[[1]][1]}) %>% unlist()
 ## calculate 20 x 20 matrix
-My_16S <- readDNAStringSet("/sybig/home/agneese/linh_cah/run7/AllTax.consensus")
+My_16S <- readDNAStringSet("/sybig/home/agneese/linh_cah/Consensus_seq_run4/Taxa20.consensus.seq")
 ## pairwise distance
 ```
 
@@ -111,12 +111,12 @@ My_16S <- readDNAStringSet("/sybig/home/agneese/linh_cah/run7/AllTax.consensus")
   ss1 <- DNAString("ACTTCACCAGC")
   ss2 <- DNAString("ACTTCACACCAGC")
   # First use a fixed substitution matrix
-  mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = -1)
+  mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = 0)
   globalAlign <-
     pairwiseAlignment(ss1, ss2, substitutionMatrix = mat,
                       gapOpening = 0, gapExtension = 0)
   localAlign <-
-    pairwiseAlignment(s1, s2, type = "local", substitutionMatrix = mat,
+    pairwiseAlignment(s1, s2, type = "global-local", substitutionMatrix = mat,
                       gapOpening = 0, gapExtension = 0)
   overlapAlign <-
     pairwiseAlignment(s1, s2, type = "overlap", substitutionMatrix = mat,
@@ -129,7 +129,7 @@ xx <-  pairwiseAlignment(pat, sub, substitutionMatrix = mat, gapOpening = 5, gap
 
 ```{r}
 #mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = -1, baseOnly = TRUE)
-mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = -1)
+mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = 0)
 
 Silva_16S_20Taxa <- Silva_16S_20Taxa[order(Silva_16S_20Taxa_TaxID)]
 Silva_16S_20Taxa_TaxID <- Silva_16S_20Taxa_TaxID[order(Silva_16S_20Taxa_TaxID)]
@@ -149,7 +149,7 @@ rownames(tmp_m) <- Silva_16S_20Taxa_TaxID
 colnames(tmp_m) <- Silva_16S_20Taxa_TaxID
 for(i in 1:20){
   pat <- My_16S[[i]]
-  tmp <- lapply(Silva_16S_20Taxa, pairwiseAlignment, type = "global-local", pattern = pat, substitutionMatrix = mat, gapOpening = 1, gapExtension = 1, scoreOnly = TRUE) %>% unlist()
+  tmp <- lapply(Silva_16S_20Taxa, pairwiseAlignment, type = "global-local", pattern = pat, substitutionMatrix = mat, gapOpening = 0, gapExtension = 0, scoreOnly = TRUE) %>% unlist()
   tmp_m[i,] <-  tmp
 }
 ```
